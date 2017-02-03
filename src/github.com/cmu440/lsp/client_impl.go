@@ -26,6 +26,7 @@ type client struct {
 	connectionSuccessChannel chan Message
 	setConnectionIdChannel chan int
 	leaveChannel chan bool
+	resendChannel chan bool
 
 	//buffers
 	readBuffer []*Message
@@ -67,6 +68,7 @@ func NewClient(hostport string, params *Params) (Client, error) {
 		connectionSuccessChannel: make(chan Message),
 		setConnectionIdChannel: make(chan int),
 		leaveChannel: make(chan bool),
+		resendChannel: make(chan bool),
 	}
 
 	err := myClient.StartDial(hostport)
@@ -147,7 +149,18 @@ func (c *client) StartDial(hostport string) error{
 }
 
 func (c *client) ticking(){
-
+	// keep ticking. If quit channel comes, stop the ticker.
+	// Else resend if ticker runs out.
+	for{
+		select {
+		case <-c.leaveChannel:
+			fmt.Println("Quiting the Channel")
+			c.ticker.Stop()
+			return
+		case <-c.ticker.C:
+			c.resendChannel <-true
+		}
+	}
 }
 
 func (c *client) handleMessages(){
