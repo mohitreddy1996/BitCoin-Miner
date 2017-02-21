@@ -27,6 +27,11 @@ type client struct {
 	setConnectionIdChannel chan int
 	leaveChannel chan bool
 	resendChannel chan bool
+	requiredIdChannel chan bool
+	getIdChannel chan int
+	requiredReadChannel chan bool
+	blockReadChannel chan bool
+	errorReadChannel chan bool
 
 	//buffers
 	readBuffer []*Message
@@ -69,6 +74,11 @@ func NewClient(hostport string, params *Params) (Client, error) {
 		setConnectionIdChannel: make(chan int),
 		leaveChannel: make(chan bool),
 		resendChannel: make(chan bool),
+		requiredIdChannel: make(chan bool),
+		getIdChannel: make(chan int),
+		requiredReadChannel: make(chan bool),
+		errorReadChannel: make(chan bool),
+		blockReadChannel: make(chan bool),
 	}
 
 	err := myClient.StartDial(hostport)
@@ -76,17 +86,43 @@ func NewClient(hostport string, params *Params) (Client, error) {
 }
 
 func (c *client) ConnID() int {
-	return -1
+	go func(){
+		c.requiredIdChannel <- true
+	}()
+
+	for{
+		select {
+		case <- c.leaveChannel:
+			return 0
+		case id:= <- c.getIdChannel:
+			return id
+		}
+	}
+	return 0
 }
 
 func (c *client) Read() ([]byte, error) {
-	// TODO: remove this line when you are ready to begin implementing this method.
-	select {} // Blocks indefinitely.
-	return nil, errors.New("not yet implemented")
+
+	c.requiredReadChannel <- true
+
+	for{
+		select {
+		case <-c.blockReadChannel:
+			time.Sleep(time.Duration(100)*time.Millisecond)
+			c.requiredReadChannel <- true
+		case msg:= <-c.readChannel:
+			return msg.Payload, nil
+		case <- c.errorReadChannel:
+			return nil, errors.New("Error during Read!")
+		}
+	}
+
+	return nil, errors.New("No Option matched?")
 }
 
 func (c *client) Write(payload []byte) error {
-	return errors.New("not yet implemented")
+	c.writeChannel <- clientWriteData{MsgData, 0, payload}
+	return nil
 }
 
 func (c *client) Close() error {
