@@ -19,6 +19,10 @@ type client struct {
 	connection *lspnet.UDPConn
 	ticker *time.Ticker
 	epochLimit int
+	epochCount int // have not received any message from server.
+	isConn bool
+	isSendData bool
+	isTimeout bool
 	dataChannel chan  *Message
 	ackChannel chan *Message
 	readChannel chan *Message
@@ -70,6 +74,10 @@ func NewClient(hostport string, params *Params) (Client, error) {
 		mainReadBuffer: make([]*Message, 0),
 		readBufferStart: 0,
 		writeBufferStart: 0,
+		epochCount: 0,
+		isConn: false,
+		isSendData: false,
+		isTimeout: false,
 		connectionSuccessChannel: make(chan Message),
 		setConnectionIdChannel: make(chan int),
 		leaveChannel: make(chan bool),
@@ -200,7 +208,83 @@ func (c *client) ticking(){
 }
 
 func (c *client) handleMessages(){
+	for{
+		select {
+		case <- c.resendChannel:
+			// Resend might be of 3 types.
+			// 1. connection ack from server. Resend connection message
+			// 2. if server is ready to send data. Send heartbeat message if now
+			// 3. if there is any unack message. resend
+			c.epochCount++
+			if !c.isConn{
+				// resend connection message
+				buf, _ := json.Marshal(NewConnect())
+				c.connection.Write(buf)
+				// block and read ack from server
+				readBuf := make([]byte, 2000)
+				n, err := c.connection.Read(readBuf)
+				msg := Message{}
+				if err == nil{
+					json.Unmarshal(readBuf[0:n], &msg)
+					if msg.Type == MsgAck{
+						c.connectionSuccessChannel <- msg
+					}
+				}
+			}else{
+				if !c.isSendData{
+					// if the server has not send data. Resend Ack.
+					msg := NewAck(c.connectionId, 0)
+					buf, _ := json.Marshal(msg)
+					c.connection.Write(buf)
+				}
+				for i:=0; i<c.winSize; i++{
+					msg:= c.writeBuffer[i]
+					if msg!=nil && msg.SeqNum!=-1{
+						// Message is not yet acknowledged.
+						buf, _ := json.Marshal(msg)
+						c.connection.Write(buf)
+					}
+				}
+			}
+			if c.epochCount > c.epochLimit{
+				//  if not responding.
+				c.isTimeout = true
+				close(c.leaveChannel)
+				c.connection.Close()
+			}
+		case msg:= <- c.dataChannel:
+			// mark isSendData as true.
+			// set epochCount as 0 as you have just received a message from server,
+			c.isSendData = true
+			c.epochCount = 0
+			// write ack to server.
+			buf, _ := json.Marshal(NewAck(c.connectionId, msg.SeqNum))
+			c.connection.Write(buf)
+			index:= msg.SeqNum - c.readBufferStart
+			if index < 0{
+				fmt.Println("Data message already acked " , msg.SeqNum)
 
+			}else if index < c.winSize{
+				c.readBuffer[index] = msg
+				var i int
+				for i=0; i<c.winSize; i++{
+					if c.readBuffer[i] == nil{
+						// no message received.
+						break
+					}else{
+						c.mainReadBuffer = append(c.mainReadBuffer, c.readBuffer[i])
+					}
+				}
+				// side the window.
+				c.readBufferStart+=1
+				c.readBuffer = c.readBuffer[i:]
+				// make sure the readbuf size if winSize+1.
+				for len(c.readBuffer) < c.winSize+1{
+					c.readBuffer = append(c.readBuffer, nil)
+				}
+			}
+		}
+	}
 }
 
 func (c *client) listen() error {
