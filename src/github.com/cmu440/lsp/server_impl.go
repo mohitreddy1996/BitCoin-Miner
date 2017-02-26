@@ -24,6 +24,10 @@ type server struct {
 	resendChannel chan bool
 	closeChannel chan int
 	writeChannel chan WriteData
+	RequestReadChannel chan bool
+	BlockReadChannel chan bool
+	ReadChannel chan *Message
+	ErrorReadChannel chan int
 }
 
 type WriteData struct {
@@ -51,6 +55,10 @@ func NewServer(port int, params *Params) (Server, error) {
 		resendChannel: make(chan bool),
 		closeChannel: make(chan int),
 		writeChannel: make(chan WriteData),
+		RequestReadChannel: make(chan bool),
+		BlockReadChannel: make(chan bool),
+		ReadChannel: make(chan *Message),
+		ErrorReadChannel: make(chan int),
 	}
 	var err error
 	go func() {
@@ -60,9 +68,17 @@ func NewServer(port int, params *Params) (Server, error) {
 }
 
 func (s *server) Read() (int, []byte, error) {
-	// TODO: remove this line when you are ready to begin implementing this method.
-	select {} // Blocks indefinitely.
-	return -1, nil, errors.New("not yet implemented")
+	s.RequestReadChannel <- true
+	for {
+		select {
+		case msg:= <-s.ReadChannel:
+			return msg.ConnID, msg.Payload, nil
+		case connId := <-s.ErrorReadChannel:
+			return connId, nil, errors.New("Error while Reading")
+
+			// add case for block read send! put timer.
+		}
+	}
 }
 
 func (s *server) Write(connID int, payload []byte) error {
@@ -78,7 +94,7 @@ func (s *server) CloseConn(connID int) error {
 }
 
 func (s *server) Close() error {
-	return errors.New("not yet implemented")
+
 }
 
 func (s *server) StartListen(port string) error {
