@@ -36,6 +36,9 @@ type client struct {
 	requiredReadChannel chan bool
 	blockReadChannel chan bool
 	errorReadChannel chan bool
+	requiredCloseChannel chan bool
+	finCloseChannel chan error
+	failCloseChannel chan bool
 
 	//buffers
 	readBuffer []*Message
@@ -87,6 +90,9 @@ func NewClient(hostport string, params *Params) (Client, error) {
 		requiredReadChannel: make(chan bool),
 		errorReadChannel: make(chan bool),
 		blockReadChannel: make(chan bool),
+		requiredCloseChannel: make(chan bool),
+		finCloseChannel: make(chan error),
+		failCloseChannel: make(chan bool),
 	}
 
 	err := myClient.StartDial(hostport)
@@ -134,7 +140,19 @@ func (c *client) Write(payload []byte) error {
 }
 
 func (c *client) Close() error {
-	return errors.New("not yet implemented")
+	c.requiredCloseChannel <- true
+	for {
+		select {
+		case <-c.failCloseChannel:
+			time.Sleep(time.Millisecond*time.Duration(10))
+			c.requiredCloseChannel<-true
+		case err := <-c.finCloseChannel:
+			close(c.leaveChannel)
+			c.connection.Close()
+			fmt.Println("Client Connection Closed! ", c.connectionId)
+			return err
+		}
+	}
 }
 
 func (c *client) StartDial(hostport string) error{
@@ -275,13 +293,101 @@ func (c *client) handleMessages(){
 						c.mainReadBuffer = append(c.mainReadBuffer, c.readBuffer[i])
 					}
 				}
-				// side the window.
+				// slide the window.
 				c.readBufferStart+=1
 				c.readBuffer = c.readBuffer[i:]
-				// make sure the readbuf size if winSize+1.
+				// make sure the readbuf size if winSize+1. // Referred!!!! Check again..
 				for len(c.readBuffer) < c.winSize+1{
 					c.readBuffer = append(c.readBuffer, nil)
 				}
+			}
+		case msg := <-c.ackChannel:
+			c.epochCount = 0
+			c.isSendData = true
+			// not acked
+			if msg.SeqNum != 0 {
+				index := msg.SeqNum - c.writeBufferStart
+				if index >= 0{
+					c.writeBuffer[index].SeqNum = -1
+					i := slideTo(c.writeBuffer, c.winSize)
+					c.writeBufferStart += 1
+					c.writeBuffer = c.writeBuffer[i:]
+					// write buffer size greater than winsize.
+					if len(c.writeBuffer) < c.winSize{
+						c.writeBuffer = extend(c.writeBuffer, c.winSize)
+					}
+					// send message in the new window.
+					for j:=0; j<c.winSize; j++{
+						newMsg := c.writeBuffer[j]
+						if newMsg != nil && newMsg.SeqNum != -1{
+							buf, _ := json.Marshal(newMsg)
+							c.connection.Write(buf)
+						}
+					}
+				}
+			}
+		case wd:= <-c.writeChannel:
+			// message to write
+			switch wd.messageType{
+			case MsgConnect:
+				// write channel had a message to write a new message showing connect.
+				buf, _ := json.Marshal(NewConnect())
+				c.connection.Write(buf)
+			case MsgData:
+				// send the message data.
+				c.seqNum++
+				msg := NewData(c.connectionId, c.seqNum, nil)
+				index := c.seqNum - c.writeBufferStart
+				// add to window and wait for ack.
+				if index + 1 > len(c.writeBuffer){
+					c.writeBuffer = extend(c.writeBuffer, index + 1)
+
+				}
+				c.writeBuffer[index] = msg
+				// send message within window now!
+				if index < c.winSize{
+					buf, _ := json.Marshal(NewAck(c.connectionId, wd.seqNum))
+					c.connection.Write(buf)
+				}
+			case MsgAck:
+				buf, _ := json.Marshal(NewAck(c.connectionId, wd.seqNum))
+				c.connection.Write(buf)
+			}
+		case <-c.requiredReadChannel:
+			// Read() send a request to read from main read buffer
+			if c.isTimeout{
+				c.errorReadChannel <- true
+				return
+			}
+			if(len(c.mainReadBuffer) > 0){
+				c.readChannel <- c.mainReadBuffer[0]
+				c.mainReadBuffer = c.mainReadBuffer[1:]
+			}else{
+				// block the read channel
+				c.blockReadChannel <- true
+			}
+		case id:= <-c.setConnectionIdChannel:
+			// mark successful connection.
+			c.connectionId = id
+			c.isConn = true
+		case <-c.requiredIdChannel:
+			c.getIdChannel <- c.connectionId
+		case <-c.requiredCloseChannel:
+			flag := true
+			for i:=0; i<len(c.writeBuffer); i++{
+				msg := c.writeBuffer[i]
+				if msg == nil{
+					break
+				}else if msg.SeqNum != -1{
+					flag = false
+					break
+				}
+			}
+			if flag{
+				fmt.Println("All Writes are sent for server")
+				c.finCloseChannel <- nil
+			}else{
+				c.errorReadChannel <- true
 			}
 		}
 	}
@@ -314,4 +420,20 @@ func (c *client) listen() error {
 
 	}
 	return nil
+}
+
+func extend(slice []*Message, length int) []*Message{
+	newSlice := make([]*Message, 2*length + 1)
+	copy(newSlice, slice)
+	return newSlice
+}
+
+func slideTo(buffer []*Message, winSize int) int {
+	var i int
+	for i=0; i<winSize; i++{
+		if buffer[i] == nil || buffer[i].SeqNum!=-1{
+			break
+		}
+	}
+	return i
 }
