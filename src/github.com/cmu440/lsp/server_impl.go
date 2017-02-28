@@ -75,8 +75,10 @@ func (s *server) Read() (int, []byte, error) {
 			return msg.ConnID, msg.Payload, nil
 		case connId := <-s.ErrorReadChannel:
 			return connId, nil, errors.New("Error while Reading")
-
 			// add case for block read send! put timer.
+		case <-s.BlockReadChannel:
+			time.Sleep(time.Millisecond*time.Duration(10))
+			s.RequestReadChannel <- true
 		}
 	}
 }
