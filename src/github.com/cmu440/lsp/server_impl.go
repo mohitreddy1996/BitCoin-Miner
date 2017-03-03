@@ -28,6 +28,22 @@ type server struct {
 	BlockReadChannel chan bool
 	ReadChannel chan *Message
 	ErrorReadChannel chan int
+	idMap map[int](clientData)
+	addressMap map[*lspnet.UDPAddr] (clientData)
+}
+
+type clientData struct {
+	connId int
+	seqNo int
+	addr *lspnet.UDPAddr
+	SendData bool
+	TimeOut bool
+	epochCount int
+	readStart int
+	writeStart int
+	readBuffer []*Message
+	writeBuffer []*Message
+	quitChannel chan bool
 }
 
 type WriteData struct {
@@ -59,6 +75,8 @@ func NewServer(port int, params *Params) (Server, error) {
 		BlockReadChannel: make(chan bool),
 		ReadChannel: make(chan *Message),
 		ErrorReadChannel: make(chan int),
+		idMap: make(map[int](clientData)),
+		addressMap: make(map[*lspnet.UDPAddr](clientData)),
 	}
 	var err error
 	go func() {
@@ -159,6 +177,21 @@ func (s *server) handleMessages(){
 	for{
 		select {
 		// handle all channel cases. All resend, receive message etc.
+		case addr := <-s.AddrChannel:
+			client, ok := s.addressMap[addr]
+			if !ok{
+				s.connectionId++
+				client = clientData{s.connectionId, 0, addr, false, false, 0,
+				1, 1, make([]*Message, s.winSize+1), make([]*Message, 2*s.winSize+1),
+				make(chan bool)}
+				s.idMap[s.connectionId] = client
+				s.addressMap[addr] = client
+
+			}
+			msg := NewAck(s.connectionId, 0)
+			buf, _ := json.Marshal(msg)
+			s.serverConnection.WriteToUDP(buf, addr)
+		// Handle ack, data, write, close, closeall, resend, requestRead.
 		}
 	}
 }
