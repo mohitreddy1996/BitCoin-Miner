@@ -192,6 +192,38 @@ func (s *server) handleMessages(){
 			buf, _ := json.Marshal(msg)
 			s.serverConnection.WriteToUDP(buf, addr)
 		// Handle ack, data, write, close, closeall, resend, requestRead.
+		case <-s.resendChannel:
+			// for every client check for
+			// 1) data which is not sent yet. Send ack for that so that client starts sending data.
+			// 2) send unack data.
+			for key := range s.idMap{
+				client, ok := s.idMap[key]
+				if !ok{
+					continue
+				}
+				client.epochCount++
+				if client.SendData == false{
+					msg := NewAck(client.connId, 0)
+					buf, _ := json.Marshal(msg)
+					s.serverConnection.WriteToUDP(buf, client.addr)
+				}
+				for i:=0; i<s.winSize; i++{
+					msg := client.writeBuffer[i]
+					if msg!=nil && msg.SeqNum!=-1{
+						// message is not yet acknowledged.
+						buf, _ := json.Marshal(msg)
+						s.serverConnection.WriteToUDP(buf, client.addr)
+					}
+				}
+
+				// close connections if client timeout
+				if client.epochCount > s.epochLimit{
+					client.TimeOut = true
+					// ToDo : Check for close channels.
+				}
+				s.idMap[key] = client
+				s.addressMap[client.addr] = client
+			}
 		}
 	}
 }
