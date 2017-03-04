@@ -30,6 +30,7 @@ type server struct {
 	ErrorReadChannel chan int
 	idMap map[int](clientData)
 	addressMap map[*lspnet.UDPAddr] (clientData)
+	mainReadBuf []*Message
 }
 
 type clientData struct {
@@ -77,6 +78,7 @@ func NewServer(port int, params *Params) (Server, error) {
 		ErrorReadChannel: make(chan int),
 		idMap: make(map[int](clientData)),
 		addressMap: make(map[*lspnet.UDPAddr](clientData)),
+		mainReadBuf: make([]*Message, 0),
 	}
 	var err error
 	go func() {
@@ -223,6 +225,72 @@ func (s *server) handleMessages(){
 				}
 				s.idMap[key] = client
 				s.addressMap[client.addr] = client
+			}
+		case msg := <-s.dataChannel:
+			client, ok := s.idMap[msg.ConnID]
+			if ok{
+				client.SendData = true
+				client.epochCount = 0
+
+				buf, _ := json.Marshal(NewAck(client.connId, msg.SeqNum))
+				s.serverConnection.WriteToUDP(buf, client.addr)
+
+				index := msg.SeqNum - client.readStart
+				if index < 0{
+					// message is already rad. ACK dropped.
+					fmt.Println("Data message already acked.", msg.SeqNum)
+				}else if index < s.winSize{
+					// save message or drop message.
+					client.readBuffer[index] = msg
+					var i int
+					for i:=0; i<s.winSize; i++{
+						if client.readBuffer[i] == nil{
+							break
+						}else{
+							s.mainReadBuf = append(s.mainReadBuf, client.readBuffer[i])
+						}
+					}
+					client.readStart += 1
+					client.readBuffer = client.readBuffer[i:]
+					for len(client.readBuffer) <= s.winSize+1{
+						client.readBuffer = append(client.readBuffer, nil)
+					}
+				}
+				s.idMap[msg.ConnID] = client
+				s.addressMap[client.addr] = client
+			}else{
+				fmt.Println("Target Client doesn't Exist", msg.ConnID)
+			}
+		case wd := <-s.writeChannel:
+			client, ok := s.idMap[wd.connId]
+			if ok{
+				client.seqNo++
+				msg := NewData(wd.connId, client.seqNo, wd.payload)
+				// save data to its position on writebuf.
+				index := client.seqNo - client.writeStart
+				// Resize the write buffer accordingly.
+				if index + 1 > len(client.writeBuffer){
+					client.writeBuffer = extend(client.writeBuffer, index+1)
+				}
+				client.writeBuffer[index] = msg
+				s.idMap[wd.connId] = client
+				s.addressMap[client.addr] = client
+				// send the message within the window immediately.
+				if index < s.winSize{
+					buf, _ := json.Marshal(msg)
+					s.serverConnection.WriteToUDP(buf, client.addr)
+				}
+ 			}else{
+				fmt.Println("Client target does not exists.")
+			}
+		case msg := <-s.ackChannel:
+			// receive acks from client.
+			client, ok := s.idMap[msg.ConnID]
+			if ok{
+				client.epochCount = 0
+				if msg.SeqNum != 0{
+					// todo read what to do.
+				}
 			}
 		}
 	}
