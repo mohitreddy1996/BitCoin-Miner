@@ -31,6 +31,10 @@ type server struct {
 	idMap map[int](clientData)
 	addressMap map[*lspnet.UDPAddr] (clientData)
 	mainReadBuf []*Message
+	StartClose bool
+	// referred
+	finCloseAllChan chan bool
+	failCloseAllChan chan bool
 }
 
 type clientData struct {
@@ -79,6 +83,9 @@ func NewServer(port int, params *Params) (Server, error) {
 		idMap: make(map[int](clientData)),
 		addressMap: make(map[*lspnet.UDPAddr](clientData)),
 		mainReadBuf: make([]*Message, 0),
+		StartClose: false,
+		finCloseAllChan: make(chan bool),
+		failCloseAllChan: make(chan bool),
 	}
 	var err error
 	go func() {
@@ -222,6 +229,11 @@ func (s *server) handleMessages(){
 				if client.epochCount > s.epochLimit{
 					client.TimeOut = true
 					// ToDo : Check for close channels.
+					fmt.Println("Timout for : ", client.connId)
+					if s.StartClose{
+						s.finCloseAllChan <- true
+					}
+
 				}
 				s.idMap[key] = client
 				s.addressMap[client.addr] = client
@@ -341,6 +353,58 @@ func (s *server) handleMessages(){
 					s.BlockReadChannel <- true
 				}
 			}
+		case connectionId := <-s.closeChannel:
+			client, ok := s.idMap[connectionId]
+			if ok{
+				flag := true
+				for i:=0; i<len(client.writeBuffer); i++{
+					msg:= client.writeBuffer[i]
+					if msg==nil{
+						break
+					}else if msg.SeqNum!=-1{
+						flag = false
+						break
+					}
+				}
+				if flag{
+					fmt.Println("All Acks sent for the client : ", connectionId)
+					delete(s.idMap, connectionId)
+					delete(s.addressMap, client.addr)
+				}
+			}else{
+				fmt.Println("Client does not exist")
+			}
+		case <-s.quitAllChannel:
+			s.StartClose = true
+			AckAll := true
+
+			LOOP:
+			for connId := range s.idMap{
+				client, ok := s.idMap[connId]
+				if ok{
+					// check for all msgs if they are acked or not.
+					for i:=0; i<len(client.writeBuffer); i++{
+						msg:=client.writeBuffer[i]
+						if msg==nil{
+							delete(s.idMap, connId)
+							delete(s.addressMap, client.addr)
+						}else if msg.SeqNum != -1{
+							AckAll = false
+							break LOOP
+						}
+					}
+				}else{
+					delete(s.idMap, connId)
+				}
+			}
+			if AckAll{
+				fmt.Println("finish Ack all pending messages to client")
+				s.finCloseAllChan <- true
+				return
+			}else{
+				s.failCloseAllChan <- true
+			}
+
 		}
 
 	}
