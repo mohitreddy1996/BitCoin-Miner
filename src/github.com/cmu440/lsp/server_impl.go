@@ -250,7 +250,7 @@ func (s *server) handleMessages(){
 							s.mainReadBuf = append(s.mainReadBuf, client.readBuffer[i])
 						}
 					}
-					client.readStart += 1
+					client.readStart += i
 					client.readBuffer = client.readBuffer[i:]
 					for len(client.readBuffer) <= s.winSize+1{
 						client.readBuffer = append(client.readBuffer, nil)
@@ -289,9 +289,43 @@ func (s *server) handleMessages(){
 			if ok{
 				client.epochCount = 0
 				if msg.SeqNum != 0{
-					// todo read what to do.
+					// update and slide write window and send data in new window
+					index := msg.SeqNum - client.writeStart
+					if index>=0{
+						client.writeBuffer[index].SeqNum = -1
+						i := slideTo(client.writeBuffer, s.winSize)
+						client.writeStart += i
+						// slide the window.
+						client.writeBuffer = client.writeBuffer[i:]
+						// make sure the size is sufficient.
+						if len(client.writeBuffer) < s.winSize{
+							client.writeBuffer = extend(client.writeBuffer, s.winSize)
+						}
+						// send message in new window.
+						for j:=0; j<s.winSize; j++{
+							newMsg := client.writeBuffer[j]
+							if newMsg!=nil && newMsg.SeqNum != -1{
+								buf, _ := json.Marshal(newMsg)
+								s.serverConnection.WriteToUDP(buf, client.addr)
+							}
+						}
+					}
 				}
+				s.idMap[msg.ConnID] = client
+				s.addressMap[client.addr] = client
+			}else{
+				fmt.Println("Target Client does not exist")
+			}
+		// case with requesting to read.
+		case <-s.RequestReadChannel:
+			if len(s.mainReadBuf) > 0{
+				msg:=s.mainReadBuf[0]
+				s.ReadChannel <- msg
+				s.mainReadBuf = s.mainReadBuf[1:]
+			}else{
+				
 			}
 		}
+
 	}
 }
