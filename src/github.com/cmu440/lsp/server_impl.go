@@ -323,7 +323,23 @@ func (s *server) handleMessages(){
 				s.ReadChannel <- msg
 				s.mainReadBuf = s.mainReadBuf[1:]
 			}else{
-				
+				// no data in main read buffer.
+				//  check if any client has exceeded timeout or not.
+				flag := false
+				for key := range s.idMap{
+					client, ok := s.idMap[key]
+					if ok && client.TimeOut{
+						fmt.Println("Closed Client : ", key)
+						s.ErrorReadChannel <- key
+						delete(s.idMap, key)
+						delete(s.addressMap, client.addr)
+						flag = true
+						break
+					}
+				}
+				if !flag{
+					s.BlockReadChannel <- true
+				}
 			}
 		}
 

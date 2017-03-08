@@ -2,7 +2,6 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="a0a803f1-48d8-4825-ba20-f0133fb11e24" name="Default" comment="">
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/github.com/cmu440/lsp/server_impl.go" afterPath="$PROJECT_DIR$/src/github.com/cmu440/lsp/server_impl.go" />
     </list>
     <ignored path="BitCoin Miner.iws" />
@@ -55,8 +54,8 @@
       <file leaf-file-name="server_impl.go" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/github.com/cmu440/lsp/server_impl.go">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="508">
-              <caret line="325" column="32" selection-start-line="325" selection-start-column="32" selection-end-line="325" selection-end-column="32" />
+            <state relative-caret-position="414">
+              <caret line="340" column="66" selection-start-line="340" selection-start-column="66" selection-end-line="340" selection-end-column="66" />
               <folding>
                 <element signature="e#62#138#0" expanded="true" />
               </folding>
@@ -262,12 +261,12 @@
       <workItem from="1488299746474" duration="711000" />
       <workItem from="1488559809748" duration="3491000" />
       <workItem from="1488633817716" duration="1954000" />
-      <workItem from="1488996154818" duration="520000" />
+      <workItem from="1488996154818" duration="1413000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="25503000" />
+    <option name="totallyTimeSpent" value="26396000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="703" y="21" width="662" height="747" extended-state="4" />
@@ -657,8 +656,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/src/github.com/cmu440/lsp/server_impl.go">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="508">
-          <caret line="325" column="32" selection-start-line="325" selection-start-column="32" selection-end-line="325" selection-end-column="32" />
+        <state relative-caret-position="414">
+          <caret line="340" column="66" selection-start-line="340" selection-start-column="66" selection-end-line="340" selection-end-column="66" />
           <folding>
             <element signature="e#62#138#0" expanded="true" />
           </folding>
