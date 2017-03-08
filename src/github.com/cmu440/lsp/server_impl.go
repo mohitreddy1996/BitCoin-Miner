@@ -35,6 +35,7 @@ type server struct {
 	// referred
 	finCloseAllChan chan bool
 	failCloseAllChan chan bool
+	closeAllChan chan bool
 }
 
 type clientData struct {
@@ -86,6 +87,7 @@ func NewServer(port int, params *Params) (Server, error) {
 		StartClose: false,
 		finCloseAllChan: make(chan bool),
 		failCloseAllChan: make(chan bool),
+		closeAllChan: make(chan bool),
 	}
 	var err error
 	go func() {
@@ -123,7 +125,21 @@ func (s *server) CloseConn(connID int) error {
 }
 
 func (s *server) Close() error {
+	// almost same as client code
+	s.closeAllChan <- true
+	for{
+		select {
+		case <-s.finCloseAllChan:
+			close(s.quitAllChannel)
+			s.serverConnection.Close()
+			return nil
+		case <-s.failCloseAllChan:
+			time.Sleep(time.Millisecond*time.Duration(50))
+			s.closeAllChan <- true
+		}
+	}
 
+	return nil
 }
 
 func (s *server) StartListen(port string) error {
@@ -374,7 +390,7 @@ func (s *server) handleMessages(){
 			}else{
 				fmt.Println("Client does not exist")
 			}
-		case <-s.quitAllChannel:
+		case <-s.closeAllChan:
 			s.StartClose = true
 			AckAll := true
 

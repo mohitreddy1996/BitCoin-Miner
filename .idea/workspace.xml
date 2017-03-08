@@ -54,8 +54,8 @@
       <file leaf-file-name="server_impl.go" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/github.com/cmu440/lsp/server_impl.go">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="5242">
-              <caret line="404" column="58" selection-start-line="404" selection-start-column="58" selection-end-line="404" selection-end-column="58" />
+            <state relative-caret-position="-1454">
+              <caret line="141" column="18" selection-start-line="141" selection-start-column="18" selection-end-line="141" selection-end-column="18" />
               <folding>
                 <element signature="e#62#138#0" expanded="true" />
               </folding>
@@ -261,12 +261,12 @@
       <workItem from="1488299746474" duration="711000" />
       <workItem from="1488559809748" duration="3491000" />
       <workItem from="1488633817716" duration="1954000" />
-      <workItem from="1488996154818" duration="2192000" />
+      <workItem from="1488996154818" duration="2513000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="27175000" />
+    <option name="totallyTimeSpent" value="27496000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="703" y="21" width="662" height="747" extended-state="4" />
@@ -656,8 +656,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/src/github.com/cmu440/lsp/server_impl.go">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="5242">
-          <caret line="404" column="58" selection-start-line="404" selection-start-column="58" selection-end-line="404" selection-end-column="58" />
+        <state relative-caret-position="-1454">
+          <caret line="141" column="18" selection-start-line="141" selection-start-column="18" selection-end-line="141" selection-end-column="18" />
           <folding>
             <element signature="e#62#138#0" expanded="true" />
           </folding>
